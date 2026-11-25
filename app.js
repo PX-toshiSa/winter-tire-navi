@@ -1,114 +1,40 @@
-const API = "https://api.open-meteo.com/v1/forecast";
-const GEO = "https://geocoding-api.open-meteo.com/v1/search";
-const KEY = "winterTireNaviRegionsV1";
-const INSTALLED_KEY = "winterTireNaviInstalledV1";
-const toyama = {id:"toyama-city",name:"富山市",admin:"富山県",lat:36.6953,lon:137.2113};
-let regions = load(KEY, [toyama]);
-let installed = load(INSTALLED_KEY, []);
-let selectedId = regions[0]?.id || toyama.id;
-let results = {};
-
-function load(key, fallback){try{return JSON.parse(localStorage.getItem(key)) ?? fallback}catch{return fallback}}
-function save(){localStorage.setItem(KEY,JSON.stringify(regions));localStorage.setItem(INSTALLED_KEY,JSON.stringify(installed))}
-function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
-function toast(msg){const t=document.getElementById("toast");t.textContent=msg;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),2600)}
-function weather(code){
- const map={0:["快晴","☀️"],1:["晴れ","🌤️"],2:["一部くもり","⛅"],3:["くもり","☁️"],45:["霧","🌫️"],48:["着氷性の霧","🌫️"],51:["弱い霧雨","🌦️"],53:["霧雨","🌦️"],55:["強い霧雨","🌧️"],56:["着氷性の霧雨","🌧️"],57:["強い着氷性の霧雨","🌧️"],61:["弱い雨","🌧️"],63:["雨","🌧️"],65:["強い雨","🌧️"],66:["凍る雨","🌧️"],67:["強い凍る雨","🌧️"],71:["弱い雪","🌨️"],73:["雪","❄️"],75:["大雪","❄️"],77:["雪あられ","🌨️"],80:["にわか雨","🌦️"],81:["強いにわか雨","🌧️"],82:["激しいにわか雨","🌧️"],85:["にわか雪","🌨️"],86:["強いにわか雪","❄️"],95:["雷雨","⛈️"],96:["ひょうを伴う雷雨","⛈️"],99:["激しい雷雨","⛈️"]};
- return map[code] || ["天気情報","🌡️"];
-}
-function adviceFor(d){
- const lows=d.temperature_2m_min||[], snow=d.snowfall_sum||[], probs=d.precipitation_probability_max||[], codes=d.weather_code||[];
- const below=lows.some(x=>x<0);
- const hasSnow=snow.some(x=>x>0)||codes.some(c=>[56,57,66,67,71,73,75,77,85,86].includes(c));
- const coldWet=lows.some((x,i)=>x<=2&&(probs[i]||0)>=40);
- if(hasSnow&&(below||coldWet)) return 4;
- if(below||hasSnow) return 3;
- if(lows.some(x=>x<=3)) return 2;
- return 1;
-}
-const adviceInfo={
- 1:{title:"通常",icon:"✓",text:"今後7日間は強い冷え込みや降雪の予報はありません。引き続き週間予報を確認してください。"},
- 2:{title:"交換準備",icon:"◷",text:"最低気温が3℃以下になる予報です。混雑する前に交換日を検討しましょう。"},
- 3:{title:"交換推奨",icon:"❄",text:"氷点下または降雪の予報があります。冬用タイヤへの交換をおすすめします。"},
- 4:{title:"早めに交換",icon:"!",text:"降雪と氷点下などの条件が重なる予報です。未交換の場合は早めに交換してください。"}
-};
-function fmtDate(date){const d=new Date(date+"T12:00:00");return new Intl.DateTimeFormat("ja-JP",{weekday:"short",month:"numeric",day:"numeric"}).format(d)}
-async function getForecast(region){
- const url=new URL(API);url.search=new URLSearchParams({
-  latitude:region.lat,longitude:region.lon,daily:"weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,snowfall_sum",forecast_days:"7",timezone:"auto"
- }).toString();
- const r=await fetch(url);if(!r.ok)throw new Error("予報APIエラー");return await r.json();
-}
-async function refreshAll(){
- const btn=document.getElementById("refreshBtn");btn.textContent="…";
- document.getElementById("detailPanel").innerHTML='<div class="loading">週間天気予報を取得しています…</div>';
- let failures=[];
- for(const region of regions){
-  try{const data=await getForecast(region);results[region.id]={data,level:adviceFor(data.daily),updated:new Date()};}
-  catch(e){failures.push(region.name);}
- }
- render();
- btn.textContent="↻";
- if(failures.length)toast(failures.join("、")+"の予報を取得できませんでした");
-}
-function renderRegions(){
- const el=document.getElementById("regionList");
- el.innerHTML=regions.map(r=>{
-  const active=r.id===selectedId, level=results[r.id]?.level, label=level?adviceInfo[level].title:"未取得";
-  return `<button class="region-chip ${active?"active":""}" data-id="${esc(r.id)}">${esc(r.name)} · ${label}</button>`;
- }).join("");
- el.querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{selectedId=b.dataset.id;render()}));
-}
-function render(){
- renderRegions();
- const region=regions.find(r=>r.id===selectedId);
- const result=results[selectedId];
- const panel=document.getElementById("detailPanel");
- if(!region){panel.innerHTML='<div class="loading">地域を登録してください。</div>';return}
- if(!result){panel.innerHTML=`<div class="detail-head"><h2>${esc(region.name)}</h2></div><div class="loading">予報データがありません。更新してください。</div>`;return}
- const {data,level,updated}=result, d=data.daily, info=adviceInfo[level], isInstalled=installed.includes(region.id);
- const lows=d.temperature_2m_min||[], highs=d.temperature_2m_max||[], snow=d.snowfall_sum||[], codes=d.weather_code||[];
- const min=Math.min(...lows), snowDays=snow.filter(x=>x>0).length;
- const rows=d.time.map((date,i)=>{const w=weather(codes[i]);return `<div class="forecast-row"><b>${fmtDate(date)}</b><span class="weather-icon">${w[1]}</span><span><span>${w[0]}</span><br><span class="condition">降雪 ${Number(snow[i]||0).toFixed(1)} cm</span></span><b>${Math.round(highs[i])}°</b><b class="low ${lows[i]<0?"below-zero":""}">${Math.round(lows[i])}°</b></div>`}).join("");
- panel.innerHTML=`
-  <div class="detail-head"><h2>${esc(region.admin||"登録地域")} ${esc(region.name)}</h2><span class="updated">更新 ${updated.toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit"})}</span></div>
-  <div class="advice level-${level}">
-   <div class="advice-top"><span class="advice-icon">${info.icon}</span><div class="advice-title">${isInstalled?"冬用タイヤ装着済み":info.title}</div></div>
-   <p>${isInstalled?"交換済みとして登録されています。":info.text}</p>
-  </div>
-  <div class="metrics">
-   <div class="metric"><span>週間最低気温</span><b>${Math.round(min)}℃</b></div>
-   <div class="metric"><span>氷点下の日</span><b>${lows.filter(x=>x<0).length}日</b></div>
-   <div class="metric"><span>降雪予報の日</span><b>${snowDays}日</b></div>
-  </div>
-  <div class="forecast-title">これから7日間の予報</div>
-  ${rows}
-  <div class="forecast-legend">最高気温　　最低気温</div>
-  <div class="status-row"><span>この地域で冬用タイヤに交換済み</span><button id="installedToggle" class="switch ${isInstalled?"on":""}" aria-label="交換済み切り替え"></button></div>
-  <div class="region-tools">${regions.length>1?`<button class="remove" id="removeRegion">この地域を削除</button>`:""}</div>`;
- document.getElementById("installedToggle").addEventListener("click",()=>{
-  installed=isInstalled?installed.filter(x=>x!==region.id):[...installed,region.id];save();render();
- });
- const rm=document.getElementById("removeRegion");if(rm)rm.addEventListener("click",()=>{if(confirm(`${region.name}を削除しますか？`)){regions=regions.filter(x=>x.id!==region.id);delete results[region.id];installed=installed.filter(x=>x!==region.id);selectedId=regions[0].id;save();render()}});
-}
-document.getElementById("refreshBtn").addEventListener("click",refreshAll);
-document.getElementById("addRegionBtn").addEventListener("click",()=>{document.getElementById("searchResults").innerHTML="";document.getElementById("regionSearch").value="";document.getElementById("addDialog").showModal()});
-document.getElementById("searchRegionBtn").addEventListener("click",async()=>{
- const q=document.getElementById("regionSearch").value.trim(), out=document.getElementById("searchResults");
- if(!q){toast("地域名を入力してください");return}
- out.innerHTML='<div class="loading">地域を検索しています…</div>';
- try{
-  const url=new URL(GEO);url.search=new URLSearchParams({name:q,count:8,language:"ja",format:"json"}).toString();
-  const r=await fetch(url), data=await r.json(), list=data.results||[];
-  if(!list.length){out.innerHTML='<p class="hint">地域が見つかりませんでした。別の表記でお試しください。</p>';return}
-  out.innerHTML=list.map((x,i)=>`<button class="result-button" data-index="${i}"><b>${esc(x.name)}</b><br><small>${esc([x.admin1,x.country].filter(Boolean).join("・"))}</small></button>`).join("");
-  out.querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{
-   const x=list[Number(b.dataset.index)], id=`${x.latitude.toFixed(4)}-${x.longitude.toFixed(4)}`;
-   if(regions.some(r=>r.id===id)){toast("この地域は登録済みです");return}
-   const region={id,name:x.name,admin:x.admin1||"",lat:x.latitude,lon:x.longitude};
-   regions.push(region);selectedId=id;save();document.getElementById("addDialog").close();render();refreshAll();
-  }));
- }catch(e){out.innerHTML='<p class="hint">検索に失敗しました。通信環境を確認してください。</p>'}
-});
-if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("./service-worker.js").catch(()=>{}))}
-refreshAll();
+const FORECAST="https://api.open-meteo.com/v1/forecast", GEOCODE="https://geocoding-api.open-meteo.com/v1/search";
+const STORE="winterTireNaviRegionsV1", FITTED="winterTireNaviInstalledV1";
+const initial={id:"toyama-city",name:"富山市",admin:"富山県",lat:36.6953,lon:137.2113};
+let regions=read(STORE,[initial]), fitted=read(FITTED,[]), selected=regions[0]?.id||initial.id, cache={}, active="judgement";
+if(!Array.isArray(regions)||!regions.length) regions=[initial];
+function read(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}}
+function save(){localStorage.setItem(STORE,JSON.stringify(regions));localStorage.setItem(FITTED,JSON.stringify(fitted))}
+function safe(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function msg(s){const t=document.querySelector("#toast");t.textContent=s;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),2500)}
+function current(){return regions.find(x=>x.id===selected)||regions[0]}
+const levels={1:["通常","✓","今後7日間は強い冷え込みや降雪の予報はありません。引き続き週間予報を確認してください。"],2:["交換準備","◷","最低気温が3℃以下になる予報です。混雑する前に交換日を検討しましょう。"],3:["交換推奨","❄","氷点下または降雪の予報があります。冬用タイヤへの交換をおすすめします。"],4:["早めに交換","!","降雪と氷点下などの条件が重なる予報です。未交換の場合は早めに交換してください。"]};
+function judge(d){const lo=d.temperature_2m_min||[],sn=d.snowfall_sum||[],pr=d.precipitation_probability_max||[],wc=d.weather_code||[];
+const snow=sn.some(v=>v>0)||wc.some(v=>[56,57,66,67,71,73,75,77,85,86].includes(v)),below=lo.some(v=>v<0),coldwet=lo.some((v,i)=>v<=2&&(pr[i]||0)>=40);
+return snow&&(below||coldwet)?4:(below||snow?3:(lo.some(v=>v<=3)?2:1))}
+async function getWeather(r){const u=new URL(FORECAST);u.search=new URLSearchParams({latitude:r.lat,longitude:r.lon,daily:"weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,snowfall_sum",forecast_days:"7",timezone:"auto"});const res=await fetch(u);if(!res.ok)throw Error();return res.json()}
+function icon(code){const m={0:"☀️",1:"🌤️",2:"⛅",3:"☁️",45:"🌫️",48:"🌫️",51:"🌦️",53:"🌦️",55:"🌧️",61:"🌧️",63:"🌧️",65:"🌧️",71:"🌨️",73:"❄️",75:"❄️",77:"🌨️",80:"🌦️",81:"🌧️",82:"🌧️",85:"🌨️",86:"❄️",95:"⛈️",96:"⛈️",99:"⛈️"};return m[code]||"🌡️"}
+function desc(code){const m={0:"快晴",1:"晴れ",2:"一部くもり",3:"くもり",45:"霧",48:"霧",51:"弱い霧雨",53:"霧雨",55:"強い霧雨",61:"弱い雨",63:"雨",65:"強い雨",71:"弱い雪",73:"雪",75:"大雪",77:"雪あられ",80:"にわか雨",81:"強いにわか雨",82:"激しいにわか雨",85:"にわか雪",86:"強いにわか雪",95:"雷雨"};return m[code]||"天気"}
+function dateLabel(s){return new Intl.DateTimeFormat("ja-JP",{month:"numeric",day:"numeric",weekday:"short"}).format(new Date(s+"T12:00:00"))}
+function rows(d){return d.time.map((day,i)=>`<div class="forecastrow"><b>${dateLabel(day)}</b><span class="weathericon">${icon(d.weather_code[i])}</span><span>${desc(d.weather_code[i])}<small>降雪 ${Number(d.snowfall_sum[i]||0).toFixed(1)} cm</small></span><b>${Math.round(d.temperature_2m_max[i])}°</b><b class="${d.temperature_2m_min[i]<0?"below":""}">${Math.round(d.temperature_2m_min[i])}°</b></div>`).join("")}
+function render(){const r=current(),v=r&&cache[r.id];document.querySelector("#regionSelect").innerHTML=regions.map(x=>`<option value="${safe(x.id)}" ${x.id===selected?"selected":""}>${safe((x.admin?x.admin+" ":"")+x.name)}</option>`).join("");
+if(!r){document.querySelector("#judgement").innerHTML="地域を登録してください";return}
+if(!v){document.querySelector("#judgement").innerHTML=`<h2>${safe(r.admin)} ${safe(r.name)}</h2><p class="loading">予報を取得しています。取得できない場合は右上の更新を押してください。</p>`;document.querySelector("#forecast").innerHTML=`<h2>${safe(r.name)}の週間予報</h2><p class="loading">予報データを待っています…</p>`}
+else{const d=v.daily,l=levels[judge(d)],min=Math.min(...d.temperature_2m_min),is=fitted.includes(r.id);
+document.querySelector("#judgement").innerHTML=`<div class="titleline"><h2>${safe(r.admin||"")} ${safe(r.name)}</h2><small>更新 ${v.updated}</small></div><div class="advice level${judge(d)}"><b>${is?"冬用タイヤ装着済み":l[1]+"　"+l[0]}</b><p>${is?"交換済みとして登録されています。":l[2]}</p></div><div class="stats"><div><small>週間最低気温</small><b>${Math.round(min)}℃</b></div><div><small>氷点下の日</small><b>${d.temperature_2m_min.filter(x=>x<0).length}日</b></div><div><small>降雪予報の日</small><b>${d.snowfall_sum.filter(x=>x>0).length}日</b></div></div><div class="toggleline"><span>この地域で冬用タイヤに交換済み</span><button id="fittedToggle" class="switch ${is?"on":""}" aria-pressed="${is}"></button></div>`;
+document.querySelector("#forecast").innerHTML=`<div class="titleline"><div><h2>${safe(r.admin||"")} ${safe(r.name)}</h2><p>これから7日間の予報</p></div><small>更新 ${v.updated}</small></div><div class="forecastrow labels"><span></span><span></span><span></span><small>最高気温</small><small>最低気温</small></div>${rows(d)}<p class="source">天気データ：<a href="https://open-meteo.com/">Open-Meteo</a>（CC BY 4.0）</p>`;
+document.querySelector("#fittedToggle").onclick=()=>{fitted=is?fitted.filter(x=>x!==r.id):[...fitted,r.id];save();render()}}
+renderSettings()}
+function renderSettings(){document.querySelector("#regionList").innerHTML=regions.map(r=>{const is=fitted.includes(r.id),v=cache[r.id];return `<article class="regionitem"><div class="itemhead"><b>${safe(r.admin||"")} ${safe(r.name)}</b><button class="selectRegion" data-id="${safe(r.id)}">この地域を表示</button></div><div class="toggleline"><span>冬用タイヤに交換済み</span><button class="switch ${is?"on":""}" data-fit="${safe(r.id)}" aria-pressed="${is}"></button></div>${regions.length>1?`<button class="remove" data-remove="${safe(r.id)}">この地域を削除</button>`:""}</article>`}).join("");
+document.querySelectorAll(".selectRegion").forEach(b=>b.onclick=()=>{selected=b.dataset.id;switchTab("judgement");render()});
+document.querySelectorAll("[data-fit]").forEach(b=>b.onclick=()=>{const id=b.dataset.fit;fitted=fitted.includes(id)?fitted.filter(x=>x!==id):[...fitted,id];save();render()});
+document.querySelectorAll("[data-remove]").forEach(b=>b.onclick=()=>{const id=b.dataset.remove,r=regions.find(x=>x.id===id);if(!confirm(`${r.name}を削除しますか？`))return;regions=regions.filter(x=>x.id!==id);fitted=fitted.filter(x=>x!==id);delete cache[id];if(selected===id)selected=regions[0].id;save();render();msg("地域を削除しました")})}
+function switchTab(tab){active=tab;document.querySelectorAll(".tab").forEach(x=>x.hidden=true);document.querySelector("#tab-"+tab).hidden=false;document.querySelectorAll(".bottom button").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));window.scrollTo({top:0,behavior:"smooth"})}
+document.querySelectorAll(".bottom button").forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));
+document.querySelector("#regionSelect").onchange=e=>{selected=e.target.value;render()};
+async function refresh(){const b=document.querySelector("#refresh");b.disabled=true;b.textContent="…";let failed=[];for(const r of regions){try{const data=await getWeather(r);cache[r.id]={daily:data.daily,updated:new Date().toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit"})}}catch{failed.push(r.name)}}render();b.disabled=false;b.textContent="↻";if(failed.length)msg("予報を取得できません："+failed.join("、"))}
+document.querySelector("#refresh").onclick=refresh;
+document.querySelector("#addRegion").onclick=()=>{document.querySelector("#searchResults").innerHTML="";document.querySelector("#searchText").value="";document.querySelector("#regionDialog").showModal()};
+document.querySelector("#searchBtn").onclick=async()=>{const q=document.querySelector("#searchText").value.trim(),box=document.querySelector("#searchResults");if(!q){msg("地域名を入力してください");return}box.textContent="検索中…";try{const u=new URL(GEOCODE);u.search=new URLSearchParams({name:q,count:8,language:"ja",format:"json"});const res=await fetch(u),data=await res.json(),list=data.results||[];if(!list.length){box.textContent="地域が見つかりません。別の表記でお試しください。";return}box.innerHTML=list.map((x,i)=>`<button class="result" data-result="${i}"><b>${safe(x.name)}</b><small>${safe([x.admin1,x.country].filter(Boolean).join("・"))}</small></button>`).join("");box.querySelectorAll("[data-result]").forEach(b=>b.onclick=()=>{const x=list[+b.dataset.result],id=`${x.latitude.toFixed(4)}-${x.longitude.toFixed(4)}`;if(regions.some(r=>r.id===id)){msg("登録済みの地域です");return}regions.push({id,name:x.name,admin:x.admin1||"",lat:x.latitude,lon:x.longitude});selected=id;save();document.querySelector("#regionDialog").close();switchTab("judgement");refresh()})}catch{box.textContent="検索できませんでした。通信環境を確認してください。"}};
+if("serviceWorker"in navigator)addEventListener("load",()=>navigator.serviceWorker.register("./service-worker.js").catch(()=>{}));
+render();refresh();

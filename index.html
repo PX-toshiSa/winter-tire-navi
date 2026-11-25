@@ -1,70 +1,30 @@
 <!doctype html>
-<html lang="ja">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#1769aa">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="冬タイヤナビ">
-  <meta name="description" content="週間天気予報から冬用タイヤへの交換時期の目安をお知らせします。">
-  <link rel="manifest" href="manifest.webmanifest">
-  <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="style.css">
-  <title>冬タイヤ交換ナビ</title>
-</head>
+<html lang="ja"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1769aa"><meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="冬タイヤナビ">
+<link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="style.css?v=2"><title>冬タイヤ交換ナビ</title></head>
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <div class="brand-icon">❄</div>
-      <div><div class="brand-title">冬タイヤ交換ナビ</div><div class="brand-sub">週間予報から交換タイミングをチェック</div></div>
-    </div>
-    <button id="refreshBtn" class="icon-button" aria-label="天気を更新">↻</button>
-  </header>
-
-  <main>
-    <section class="region-section">
-      <div class="section-heading">
-        <div><h2>登録地域</h2><p>地域ごとに交換時期を判定します</p></div>
-        <button id="addRegionBtn" class="small-primary">＋ 地域追加</button>
-      </div>
-      <div id="regionList" class="region-list"></div>
-    </section>
-
-    <section id="detailPanel" class="detail-panel">
-      <div class="loading">天気予報を取得しています…</div>
-    </section>
-
-    <section class="howto card">
-      <h3>判定基準（バランス型）</h3>
-      <div class="rule"><span class="dot green"></span><div><b>通常</b><small>最低気温が3℃を超え、氷点下・降雪予報なし</small></div></div>
-      <div class="rule"><span class="dot orange"></span><div><b>交換準備</b><small>最低気温が3℃以下</small></div></div>
-      <div class="rule"><span class="dot red"></span><div><b>交換推奨</b><small>氷点下または降雪予報</small></div></div>
-      <div class="rule"><span class="dot darkred"></span><div><b>早めに交換</b><small>降雪と氷点下、または降雪と低温・降水が重なる</small></div></div>
-    </section>
-
-    <p class="disclaimer">この判定は週間天気予報に基づく交換時期の目安です。市町村内でも標高・日陰・橋の上・時間帯などで路面状況は異なります。実際の道路状況や道路管理者の情報を優先してください。</p>
-    <p class="source">天気データ：<a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>（CC BY 4.0）</p>
-  </main>
-
-  <nav class="bottom-nav">
-    <span class="nav-active">❄　交換判断</span>
-    <span>☁　週間予報</span>
-    <span>⚙　地域設定</span>
-  </nav>
-
-  <dialog id="addDialog">
-    <form method="dialog" id="addForm">
-      <div class="dialog-head"><h2>地域を追加</h2><button class="close" value="cancel" aria-label="閉じる">×</button></div>
-      <label for="regionSearch">市区町村名・住所</label>
-      <input id="regionSearch" type="text" placeholder="例：富山県高岡市" autocomplete="off">
-      <button id="searchRegionBtn" type="button" class="primary full">地域を検索</button>
-      <div id="searchResults" class="search-results"></div>
-      <p class="hint">検索結果から地域を選ぶと登録されます。</p>
-    </form>
-  </dialog>
-
-  <div id="toast" role="status" aria-live="polite"></div>
-  <script src="app.js"></script>
-</body>
-</html>
+<header class="top"><div class="brand"><span class="snow">❄</span><div><b>冬タイヤ交換ナビ</b><small>週間予報から交換タイミングをチェック</small></div></div><button id="refresh" aria-label="更新">↻</button></header>
+<main>
+<section class="regionbar"><label for="regionSelect">表示する地域</label><select id="regionSelect"></select></section>
+<section id="tab-judgement" class="tab">
+ <div id="judgement" class="card"><p class="loading">天気予報を取得しています…</p></div>
+ <div class="card rules"><h3>判定基準（バランス型）</h3>
+ <p><i class="green"></i><b>通常</b><small>最低気温が3℃を超え、氷点下・降雪予報なし</small></p>
+ <p><i class="orange"></i><b>交換準備</b><small>最低気温が3℃以下</small></p>
+ <p><i class="red"></i><b>交換推奨</b><small>氷点下または降雪予報</small></p>
+ <p><i class="darkred"></i><b>早めに交換</b><small>降雪と氷点下、または降雪と低温・降水が重なる</small></p></div>
+ <p class="note">この判定は週間天気予報に基づく交換時期の目安です。市町村内でも標高・日陰・橋の上・時間帯などで路面状況は異なります。実際の道路状況や道路管理者の情報を優先してください。</p>
+ <p class="source">天気データ：<a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>（CC BY 4.0）</p>
+</section>
+<section id="tab-forecast" class="tab" hidden><div id="forecast" class="card"></div></section>
+<section id="tab-settings" class="tab" hidden>
+ <div class="card"><div class="heading"><div><h2>地域設定</h2><p>地域の追加・削除、交換済みの登録ができます</p></div><button id="addRegion" class="primary">＋ 地域追加</button></div><div id="regionList"></div></div>
+ <p class="note">登録した地域や交換済みの状態は、この端末のブラウザに保存されます。</p>
+</section></main>
+<nav class="bottom"><button data-tab="judgement" class="active"><span>❄</span>交換判断</button><button data-tab="forecast"><span>☁</span>週間予報</button><button data-tab="settings"><span>⚙</span>地域設定</button></nav>
+<dialog id="regionDialog"><form method="dialog"><div class="dialoghead"><b>地域を追加</b><button value="cancel" class="close">×</button></div>
+<label for="searchText">市区町村名</label><input id="searchText" placeholder="例：富山県高岡市"><button id="searchBtn" type="button" class="primary wide">地域を検索</button><div id="searchResults"></div></form></dialog>
+<div id="toast" role="status"></div><script src="app.js?v=2"></script></body></html>
